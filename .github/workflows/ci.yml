@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     name: Test Detector
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
     - name: Checkout code
@@ -24,11 +24,46 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
+          software-properties-common \
+          lsb-release \
+          apt-transport-https \
+          ca-certificates
+        
+        # Try to add iovisor repository for Ubuntu 22.04
+        UBUNTU_CODENAME=$(lsb_release -cs)
+        echo "Ubuntu codename: $UBUNTU_CODENAME"
+        
+        # For Ubuntu 22.04 (jammy), try iovisor repo
+        if [ "$UBUNTU_CODENAME" = "jammy" ]; then
+          echo "Adding iovisor repository for Ubuntu 22.04..."
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 4052245BD4284CDD 2>/dev/null || true
+          echo "deb https://repo.iovisor.org/apt/$UBUNTU_CODENAME $UBUNTU_CODENAME main" | sudo tee /etc/apt/sources.list.d/iovisor.list
+          sudo apt-get update || {
+            echo "⚠️ iovisor repo not available, removing..."
+            sudo rm -f /etc/apt/sources.list.d/iovisor.list
+            sudo apt-get update
+          }
+        fi
+        
+        # Install BCC packages (same as setup.sh)
+        sudo apt-get install -y \
           bpfcc-tools \
+          libbpfcc \
+          libbpfcc-dev \
           python3-bpfcc \
           linux-headers-$(uname -r) \
           clang \
-          llvm
+          llvm \
+          build-essential
+        
+        # Verify BCC installation
+        echo "Verifying BCC installation..."
+        if python3 -c "from bcc import BPF" 2>/dev/null; then
+          BCC_VERSION=$(python3 -c "import bcc; print(bcc.__version__)" 2>/dev/null || echo "unknown")
+          echo "✅ BCC installed: $BCC_VERSION"
+        else
+          echo "⚠️ BCC import failed, but continuing..."
+        fi
     
     - name: Display system info
       run: |
