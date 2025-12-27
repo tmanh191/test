@@ -1,0 +1,16 @@
+NOTICE
+
+This project includes code derived from ebpfangel by TomasPhilippart.
+
+Original project: https://github.com/TomasPhilippart/ebpfangel
+
+The original ebpfangel project is licensed under the MIT License.
+
+This derivative work maintains the same MIT License and includes:
+- Original eBPF detection logic
+- Enhanced process termination mechanisms
+- Improved pattern matching algorithms
+- Additional threshold-based detection features
+
+All modifications and enhancements are the work of the current maintainer.
+
