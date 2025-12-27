@@ -1,5 +1,7 @@
 # eBPF Ransomware Detector (Enhanced)
 
+![CI/CD Pipeline](https://github.com/tmanh191/eBPF-ransomware-reactive-detector/workflows/CI/CD%20Pipeline/badge.svg)
+
 An enhanced eBPF-based ransomware detection system with automatic process termination capabilities.
 
 ## Overview
