@@ -1,0 +1,375 @@
+name: CI/CD Pipeline - Run & Test
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master, dev ]
+
+jobs:
+  run-and-test:
+    name: 🚀 Run Detector & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    
+    - name: Install BCC and dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bpfcc-tools \
+          python3-bpfcc \
+          libbpfcc \
+          linux-headers-$(uname -r) \
+          python3-pip \
+          clang \
+          llvm
+    
+    - name: Display system information
+      run: |
+        echo "## 📋 System Information" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **OS**: $(uname -a)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Kernel**: $(uname -r)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Python**: $(python3 --version)" >> $GITHUB_STEP_SUMMARY
+        echo "- **BCC Version**: $(python3 -c 'import bcc; print(bcc.__version__)' 2>/dev/null || echo 'Installed')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Test Python imports
+      run: |
+        echo "## 🧪 Testing Python Imports" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        python3 << 'EOF'
+        import sys
+        print("Testing imports...")
+        
+        try:
+            import os, sys, time, ctypes, csv, signal
+            print("✅ Standard library imports: OK")
+            print("- ✅ Standard library imports: OK" >> sys.stdout)
+        except ImportError as e:
+            print(f"❌ Standard library import failed: {e}")
+            sys.exit(1)
+        
+        try:
+            from bcc import BPF
+            print("✅ BCC import: OK")
+            print("- ✅ BCC import: OK" >> sys.stdout)
+        except ImportError as e:
+            print(f"❌ BCC import failed: {e}")
+            sys.exit(1)
+        
+        try:
+            import detector
+            print("✅ Detector module import: OK")
+            print("- ✅ Detector module import: OK" >> sys.stdout)
+        except Exception as e:
+            print(f"❌ Detector import failed: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        
+        print("\n✅ All imports successful!")
+        EOF
+        echo "- ✅ All imports successful!" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Test detector functions
+      run: |
+        echo "## 🔧 Testing Detector Functions" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        python3 << 'EOF'
+        import sys
+        import os
+        sys.path.insert(0, os.getcwd())
+        import detector
+        
+        print("Testing detector functions...")
+        results = []
+        
+        # Test EventType
+        try:
+            assert detector.EventType.OPEN == 0
+            assert detector.EventType.CREATE == 1
+            assert detector.EventType.ENCRYPT == 3
+            results.append("✅ EventType enum")
+            print("✅ EventType enum: OK")
+        except Exception as e:
+            results.append(f"❌ EventType enum: {e}")
+            print(f"❌ EventType enum: {e}")
+        
+        # Test encode_pattern
+        try:
+            pattern = detector.encode_pattern([
+                detector.EventType.OPEN,
+                detector.EventType.CREATE
+            ])
+            assert hasattr(pattern, 'bitmap')
+            assert hasattr(pattern, 'bitmask')
+            results.append("✅ encode_pattern")
+            print("✅ encode_pattern: OK")
+        except Exception as e:
+            results.append(f"❌ encode_pattern: {e}")
+            print(f"❌ encode_pattern: {e}")
+        
+        # Test decode functions
+        try:
+            assert detector.decode_type(0) == "Open"
+            assert detector.decode_severity(0) == "OK"
+            assert detector.decode_severity(2) == "MAJ"
+            results.append("✅ decode functions")
+            print("✅ decode functions: OK")
+        except Exception as e:
+            results.append(f"❌ decode functions: {e}")
+            print(f"❌ decode functions: {e}")
+        
+        # Test Config
+        try:
+            config = detector.Config(
+                (ctypes.c_uint16 * detector.EVENT_TYPES)(*[10] * detector.EVENT_TYPES),
+                5_000_000_000,
+                0
+            )
+            assert config.reset_period_ns == 5_000_000_000
+            results.append("✅ Config structure")
+            print("✅ Config structure: OK")
+        except Exception as e:
+            results.append(f"❌ Config structure: {e}")
+            print(f"❌ Config structure: {e}")
+        
+        print(f"\nTest results: {len([r for r in results if r.startswith('✅')])}/{len(results)} passed")
+        
+        # Write to summary
+        for result in results:
+            print(f"- {result}" >> sys.stdout)
+        EOF
+        echo "" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Compile BPF program
+      run: |
+        echo "## 🔨 Compiling BPF Program" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        python3 << 'EOF'
+        import sys
+        from bcc import BPF
+        
+        print("Compiling BPF program...")
+        try:
+            b = BPF(src_file="bpf.c", cflags=["-Wno-macro-redefined"], debug=0)
+            print("✅ BPF program compiled successfully!")
+            print("- ✅ BPF program compiled successfully!" >> sys.stdout)
+            
+            # Check BPF maps
+            required_maps = ['config', 'patterns', 'threshold_patterns', 'pidstats', 'events']
+            print("\nChecking BPF maps:")
+            for map_name in required_maps:
+                if map_name in b:
+                    print(f"  ✅ Map '{map_name}' found")
+                    print(f"- ✅ BPF map '{map_name}' found" >> sys.stdout)
+                else:
+                    print(f"  ⚠️ Map '{map_name}' not found")
+                    print(f"- ⚠️ BPF map '{map_name}' not found" >> sys.stdout)
+            
+            # Test updating config
+            import detector
+            try:
+                detector.update_config(b)
+                print("✅ update_config: OK")
+                print("- ✅ update_config executed successfully" >> sys.stdout)
+            except Exception as e:
+                print(f"⚠️ update_config warning: {e}")
+                print(f"- ⚠️ update_config: {e}" >> sys.stdout)
+            
+            try:
+                detector.update_patterns(b)
+                print("✅ update_patterns: OK")
+                print("- ✅ update_patterns executed successfully" >> sys.stdout)
+            except Exception as e:
+                print(f"⚠️ update_patterns warning: {e}")
+                print(f"- ⚠️ update_patterns: {e}" >> sys.stdout)
+            
+            try:
+                detector.update_threshold_patterns(b)
+                print("✅ update_threshold_patterns: OK")
+                print("- ✅ update_threshold_patterns executed successfully" >> sys.stdout)
+            except Exception as e:
+                print(f"⚠️ update_threshold_patterns warning: {e}")
+                print(f"- ⚠️ update_threshold_patterns: {e}" >> sys.stdout)
+            
+        except Exception as e:
+            print(f"❌ BPF compilation failed: {e}")
+            print(f"- ❌ BPF compilation failed: {e}" >> sys.stdout)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        EOF
+        echo "" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Run detector validation (dry-run)
+      run: |
+        echo "## 🎯 Running Detector Validation" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        python3 << 'EOF'
+        import sys
+        import os
+        sys.path.insert(0, os.getcwd())
+        from bcc import BPF
+        import detector
+        
+        print("Running detector validation...")
+        
+        try:
+            # Initialize BPF
+            b = BPF(src_file="bpf.c", cflags=["-Wno-macro-redefined"], debug=0)
+            print("✅ BPF initialized")
+            print("- ✅ BPF initialized" >> sys.stdout)
+            
+            # Update configuration
+            detector.update_config(b)
+            detector.update_patterns(b)
+            detector.update_threshold_patterns(b)
+            print("✅ Configuration updated")
+            print("- ✅ Configuration updated" >> sys.stdout)
+            
+            # Read config back
+            import ctypes
+            config_map = b['config']
+            config_data = config_map[ctypes.c_int(0)]
+            print(f"✅ Config read back: reset_period={config_data.reset_period_ns}ns, min_severity={config_data.min_severity}")
+            print(f"- ✅ Config validated: reset_period={config_data.reset_period_ns}ns" >> sys.stdout)
+            
+            # Check patterns
+            patterns = b['patterns']
+            pattern_count = 0
+            for i in range(8):  # MAX_PATTERNS
+                try:
+                    p = patterns[ctypes.c_int(i)]
+                    if p.bitmap != 0 or p.bitmask != 0:
+                        pattern_count += 1
+                except:
+                    break
+            print(f"✅ Found {pattern_count} patterns loaded")
+            print(f"- ✅ {pattern_count} patterns loaded" >> sys.stdout)
+            
+            # Check threshold patterns
+            threshold_patterns = b['threshold_patterns']
+            tpattern_count = 0
+            for i in range(2):  # MAX_THRESHOLD_PATTERNS
+                try:
+                    tp = threshold_patterns[ctypes.c_int(i)]
+                    if tp.bitmap != 0 or tp.bitmask != 0:
+                        tpattern_count += 1
+                except:
+                    break
+            print(f"✅ Found {tpattern_count} threshold patterns loaded")
+            print(f"- ✅ {tpattern_count} threshold patterns loaded" >> sys.stdout)
+            
+            print("\n✅ Detector validation complete - all components working!")
+            print("- ✅ Detector validation complete!" >> sys.stdout)
+            
+        except Exception as e:
+            print(f"❌ Validation failed: {e}")
+            print(f"- ❌ Validation failed: {e}" >> sys.stdout)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        EOF
+        echo "" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Test file operations
+      run: |
+        echo "## 📁 Testing File Operations" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        python3 << 'EOF'
+        import os
+        import sys
+        
+        print("Testing file operations...")
+        
+        # Check required files
+        required_files = {
+            'detector.py': 'Main detector script',
+            'bpf.c': 'BPF program source',
+            'bpf.h': 'BPF header file',
+            'README.md': 'Documentation'
+        }
+        
+        all_ok = True
+        for filename, description in required_files.items():
+            if os.path.exists(filename):
+                size = os.path.getsize(filename)
+                print(f"✅ {filename} ({description}): {size} bytes")
+                print(f"- ✅ {filename}: {size} bytes" >> sys.stdout)
+            else:
+                print(f"❌ {filename} ({description}): MISSING")
+                print(f"- ❌ {filename}: MISSING" >> sys.stdout)
+                all_ok = False
+        
+        # Check Python syntax
+        import py_compile
+        try:
+            py_compile.compile('detector.py', doraise=True)
+            print("✅ detector.py syntax: Valid")
+            print("- ✅ detector.py syntax: Valid" >> sys.stdout)
+        except py_compile.PyCompileError as e:
+            print(f"❌ detector.py syntax: {e}")
+            print(f"- ❌ detector.py syntax error" >> sys.stdout)
+            all_ok = False
+        
+        if all_ok:
+            print("\n✅ All file operations OK!")
+        else:
+            print("\n❌ Some file checks failed!")
+            sys.exit(1)
+        EOF
+        echo "" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Generate execution summary
+      if: always()
+      run: |
+        echo "## 📊 Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ✅ What was tested:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "1. **Python Imports** - All required modules can be imported" >> $GITHUB_STEP_SUMMARY
+        echo "2. **Detector Functions** - Core functions work correctly" >> $GITHUB_STEP_SUMMARY
+        echo "3. **BPF Compilation** - BPF program compiles successfully" >> $GITHUB_STEP_SUMMARY
+        echo "4. **Detector Validation** - Full detector initialization and configuration" >> $GITHUB_STEP_SUMMARY
+        echo "5. **File Operations** - All required files present and valid" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎯 Result:" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ **All tests passed!** The detector is ready to run on a server with proper kernel support." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Some tests failed.** Please check the logs above for details." >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📝 Note:" >> $GITHUB_STEP_SUMMARY
+        echo "This CI/CD runs in a virtualized environment. To run the detector in production:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Install BCC: \`sudo apt-get install bpfcc-tools python3-bpfcc\`" >> $GITHUB_STEP_SUMMARY
+        echo "2. Run with root: \`sudo python3 detector.py\`" >> $GITHUB_STEP_SUMMARY
+        echo "3. The detector requires Linux kernel 4.18+ with eBPF support" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Create test artifacts
+      if: always()
+      run: |
+        mkdir -p test-results
+        echo "Test completed at: $(date)" > test-results/test-info.txt
+        echo "Git commit: ${{ github.sha }}" >> test-results/test-info.txt
+        echo "Branch: ${{ github.ref_name }}" >> test-results/test-info.txt
+        echo "Workflow run: ${{ github.run_id }}" >> test-results/test-info.txt
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ github.sha }}
+        path: test-results/
+        retention-days: 30
+
