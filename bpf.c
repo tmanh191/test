@@ -22,20 +22,20 @@
 #endif
 
 // config data from userspace
-BPF_ARRAY(config, config_t, 1);
+// BPF_ARRAY(config, config_t, 1);
 
-// event patterns from userspace
-BPF_ARRAY(patterns, event_pattern_t, MAX_PATTERNS);
+// // event patterns from userspace
+// BPF_ARRAY(patterns, event_pattern_t, MAX_PATTERNS);
 
-// threshold patterns from userspace
-BPF_ARRAY(threshold_patterns, threshold_pattern_t, MAX_THRESHOLD_PATTERNS);
+// // threshold patterns from userspace
+// BPF_ARRAY(threshold_patterns, threshold_pattern_t, MAX_THRESHOLD_PATTERNS);
 
-// hash map (pid -> pidstat) to analyze file access pattern per pid and flag suspicious pid
-BPF_HASH(pidstats, u32 /* pid */, pidstat_t, 1024);
+// // hash map (pid -> pidstat) to analyze file access pattern per pid and flag suspicious pid
+// BPF_HASH(pidstats, u32 /* pid */, pidstat_t, 1024);
 
-// ring buffer to report events (16 pages x 4096 bytes shared across all CPUs)
-// getconf PAGESIZE returns the page size in bytes (4096)
-BPF_RINGBUF_OUTPUT(events, 1 << 4);
+// // ring buffer to report events (16 pages x 4096 bytes shared across all CPUs)
+// // getconf PAGESIZE returns the page size in bytes (4096)
+// BPF_RINGBUF_OUTPUT(events, 1 << 4);
 
 
 // get config from BPF_ARRAY
