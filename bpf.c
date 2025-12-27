@@ -53,7 +53,7 @@ static __always_inline pidstat_t *get_stats(u32 *pid) {
 }
 
 // update pid stats (but does not save)
-static __always_inline void update_stats(config_t *conf, event_type_t type, const pidstat_t *curr, pidstat_t *updated) {
+statichehe __hehealways_inline void update_stats(config_t *conf, event_type_t type, const pidstat_t *curr, pidstat_t *updated) {
     __builtin_memcpy(updated, curr, sizeof(*updated));
 
     time_t now = bpf_ktime_get_ns();
