@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 name: CI/CD Pipeline - Run & Test
-=======
-name: CI/CD Pipeline
->>>>>>> 40be31d6ede671b9df52e21f02882b97a9e635c2
 
 on:
   push:
@@ -11,13 +7,8 @@ on:
     branches: [ main, master, dev ]
 
 jobs:
-<<<<<<< HEAD
   run-and-test:
     name: 🚀 Run Detector & Test
-=======
-  python-check:
-    name: Python Syntax & Lint Check
->>>>>>> 40be31d6ede671b9df52e21f02882b97a9e635c2
     runs-on: ubuntu-latest
     
     steps:
@@ -29,178 +20,6 @@ jobs:
       with:
         python-version: '3.9'
     
-<<<<<<< HEAD
-=======
-    - name: Check Python syntax
-      run: |
-        python3 -m py_compile detector.py
-        echo "✓ Python syntax check passed"
-    
-    - name: Install Python linters
-      run: |
-        pip install --upgrade pip
-        pip install flake8 pylint
-    
-    - name: Run flake8
-      run: |
-        flake8 detector.py --max-line-length=120 --ignore=E501,W503 || true
-        echo "✓ Flake8 check completed"
-    
-    - name: Run pylint (non-blocking)
-      run: |
-        pylint detector.py --disable=all --enable=E,F || true
-        echo "✓ Pylint check completed"
-
-  c-code-check:
-    name: C Code Compilation Check
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          clang \
-          llvm \
-          libbpf-dev \
-          linux-headers-$(uname -r) \
-          bpfcc-tools \
-          python3-bpfcc
-    
-    - name: Check C syntax (basic)
-      run: |
-        # Basic syntax check using clang
-        clang -fsyntax-only -I/usr/include/bpf -I/usr/src/linux-headers-$(uname -r)/include \
-          -I/usr/src/linux-headers-$(uname -r)/include/uapi \
-          -I/usr/src/linux-headers-$(uname -r)/include/generated/uapi \
-          bpf.c 2>&1 | head -20 || echo "Note: Full compilation requires BCC runtime"
-        echo "✓ C syntax check completed"
-
-  bpf-compilation-check:
-    name: BPF Program Compilation Check
-    runs-on: ubuntu-latest
-    # This job may fail if BCC is not fully available, but we try anyway
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install BCC
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          bpfcc-tools \
-          python3-bpfcc \
-          libbpfcc \
-          linux-headers-$(uname -r)
-      continue-on-error: true
-    
-    - name: Test BPF compilation with Python
-      run: |
-        python3 << 'EOF'
-        import sys
-        try:
-            from bcc import BPF
-            print("✓ BCC import successful")
-            
-            # Try to compile BPF program (may fail without proper kernel support)
-            try:
-                b = BPF(src_file="bpf.c", cflags=["-Wno-macro-redefined"], debug=0)
-                print("✓ BPF program compiled successfully")
-            except Exception as e:
-                print(f"⚠ BPF compilation warning: {e}")
-                print("Note: This is expected in CI environment without full kernel support")
-                sys.exit(0)  # Don't fail the build
-        except ImportError as e:
-            print(f"⚠ BCC not available: {e}")
-            print("Note: BCC requires kernel support and may not be available in CI")
-            sys.exit(0)  # Don't fail the build
-        EOF
-      continue-on-error: true
-
-  file-structure-check:
-    name: File Structure & Requirements Check
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Check required files exist
-      run: |
-        echo "Checking required files..."
-        test -f detector.py && echo "✓ detector.py exists" || (echo "✗ detector.py missing" && exit 1)
-        test -f bpf.c && echo "✓ bpf.c exists" || (echo "✗ bpf.c missing" && exit 1)
-        test -f bpf.h && echo "✓ bpf.h exists" || (echo "✗ bpf.h missing" && exit 1)
-        test -f README.md && echo "✓ README.md exists" || (echo "✗ README.md missing" && exit 1)
-        echo "✓ All required files present"
-    
-    - name: Check file permissions
-      run: |
-        if [ -x detector.py ]; then
-          echo "✓ detector.py is executable"
-        else
-          echo "Note: detector.py is not executable (may need chmod +x)"
-        fi
-    
-    - name: Validate Python shebang
-      run: |
-        if head -1 detector.py | grep -q "^#!/usr/bin/python3"; then
-          echo "✓ Python shebang found"
-        else
-          echo "Note: No Python shebang found in detector.py"
-        fi
-
-  code-quality:
-    name: Code Quality Checks
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Check for common issues
-      run: |
-        echo "Checking for common code issues..."
-        
-        # Check for hardcoded paths
-        if grep -r "/home/" . --exclude-dir=.git 2>/dev/null; then
-          echo "⚠ Warning: Found hardcoded /home/ paths"
-        fi
-        
-        # Check for TODO/FIXME comments
-        echo "Checking for TODO/FIXME comments..."
-        grep -r "TODO\|FIXME" . --exclude-dir=.git || echo "✓ No TODO/FIXME comments found"
-        
-        # Check file sizes
-        echo "Checking file sizes..."
-        find . -type f -name "*.py" -o -name "*.c" -o -name "*.h" | while read f; do
-          size=$(wc -l < "$f")
-          if [ $size -gt 1000 ]; then
-            echo "⚠ Large file: $f ($size lines)"
-          fi
-        done
-        
-        echo "✓ Code quality checks completed"
-
-  run-tests:
-    name: Run Tests & Generate Report
-    runs-on: ubuntu-latest
-    needs: [python-check, build-and-validate]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'
-    
->>>>>>> 40be31d6ede671b9df52e21f02882b97a9e635c2
     - name: Install BCC and dependencies
       run: |
         sudo apt-get update
@@ -209,7 +28,6 @@ jobs:
           python3-bpfcc \
           libbpfcc \
           linux-headers-$(uname -r) \
-<<<<<<< HEAD
           python3-pip \
           clang \
           llvm
@@ -235,7 +53,7 @@ jobs:
         try:
             import os, sys, time, ctypes, csv, signal
             print("✅ Standard library imports: OK")
-            print("- ✅ Standard library imports: OK" >> sys.stdout)
+            print("- ✅ Standard library imports: OK", flush=True)
         except ImportError as e:
             print(f"❌ Standard library import failed: {e}")
             sys.exit(1)
@@ -243,7 +61,7 @@ jobs:
         try:
             from bcc import BPF
             print("✅ BCC import: OK")
-            print("- ✅ BCC import: OK" >> sys.stdout)
+            print("- ✅ BCC import: OK", flush=True)
         except ImportError as e:
             print(f"❌ BCC import failed: {e}")
             sys.exit(1)
@@ -251,7 +69,7 @@ jobs:
         try:
             import detector
             print("✅ Detector module import: OK")
-            print("- ✅ Detector module import: OK" >> sys.stdout)
+            print("- ✅ Detector module import: OK", flush=True)
         except Exception as e:
             print(f"❌ Detector import failed: {e}")
             import traceback
@@ -312,6 +130,7 @@ jobs:
             print(f"❌ decode functions: {e}")
         
         # Test Config
+        import ctypes
         try:
             config = detector.Config(
                 (ctypes.c_uint16 * detector.EVENT_TYPES)(*[10] * detector.EVENT_TYPES),
@@ -329,7 +148,7 @@ jobs:
         
         # Write to summary
         for result in results:
-            print(f"- {result}" >> sys.stdout)
+            print(f"- {result}", flush=True)
         EOF
         echo "" >> $GITHUB_STEP_SUMMARY
     
@@ -345,7 +164,7 @@ jobs:
         try:
             b = BPF(src_file="bpf.c", cflags=["-Wno-macro-redefined"], debug=0)
             print("✅ BPF program compiled successfully!")
-            print("- ✅ BPF program compiled successfully!" >> sys.stdout)
+            print("- ✅ BPF program compiled successfully!", flush=True)
             
             # Check BPF maps
             required_maps = ['config', 'patterns', 'threshold_patterns', 'pidstats', 'events']
@@ -353,40 +172,40 @@ jobs:
             for map_name in required_maps:
                 if map_name in b:
                     print(f"  ✅ Map '{map_name}' found")
-                    print(f"- ✅ BPF map '{map_name}' found" >> sys.stdout)
+                    print(f"- ✅ BPF map '{map_name}' found", flush=True)
                 else:
                     print(f"  ⚠️ Map '{map_name}' not found")
-                    print(f"- ⚠️ BPF map '{map_name}' not found" >> sys.stdout)
+                    print(f"- ⚠️ BPF map '{map_name}' not found", flush=True)
             
             # Test updating config
             import detector
             try:
                 detector.update_config(b)
                 print("✅ update_config: OK")
-                print("- ✅ update_config executed successfully" >> sys.stdout)
+                print("- ✅ update_config executed successfully", flush=True)
             except Exception as e:
                 print(f"⚠️ update_config warning: {e}")
-                print(f"- ⚠️ update_config: {e}" >> sys.stdout)
+                print(f"- ⚠️ update_config: {e}", flush=True)
             
             try:
                 detector.update_patterns(b)
                 print("✅ update_patterns: OK")
-                print("- ✅ update_patterns executed successfully" >> sys.stdout)
+                print("- ✅ update_patterns executed successfully", flush=True)
             except Exception as e:
                 print(f"⚠️ update_patterns warning: {e}")
-                print(f"- ⚠️ update_patterns: {e}" >> sys.stdout)
+                print(f"- ⚠️ update_patterns: {e}", flush=True)
             
             try:
                 detector.update_threshold_patterns(b)
                 print("✅ update_threshold_patterns: OK")
-                print("- ✅ update_threshold_patterns executed successfully" >> sys.stdout)
+                print("- ✅ update_threshold_patterns executed successfully", flush=True)
             except Exception as e:
                 print(f"⚠️ update_threshold_patterns warning: {e}")
-                print(f"- ⚠️ update_threshold_patterns: {e}" >> sys.stdout)
+                print(f"- ⚠️ update_threshold_patterns: {e}", flush=True)
             
         except Exception as e:
             print(f"❌ BPF compilation failed: {e}")
-            print(f"- ❌ BPF compilation failed: {e}" >> sys.stdout)
+            print(f"- ❌ BPF compilation failed: {e}", flush=True)
             import traceback
             traceback.print_exc()
             sys.exit(1)
@@ -403,6 +222,7 @@ jobs:
         sys.path.insert(0, os.getcwd())
         from bcc import BPF
         import detector
+        import ctypes
         
         print("Running detector validation...")
         
@@ -410,21 +230,20 @@ jobs:
             # Initialize BPF
             b = BPF(src_file="bpf.c", cflags=["-Wno-macro-redefined"], debug=0)
             print("✅ BPF initialized")
-            print("- ✅ BPF initialized" >> sys.stdout)
+            print("- ✅ BPF initialized", flush=True)
             
             # Update configuration
             detector.update_config(b)
             detector.update_patterns(b)
             detector.update_threshold_patterns(b)
             print("✅ Configuration updated")
-            print("- ✅ Configuration updated" >> sys.stdout)
+            print("- ✅ Configuration updated", flush=True)
             
             # Read config back
-            import ctypes
             config_map = b['config']
             config_data = config_map[ctypes.c_int(0)]
             print(f"✅ Config read back: reset_period={config_data.reset_period_ns}ns, min_severity={config_data.min_severity}")
-            print(f"- ✅ Config validated: reset_period={config_data.reset_period_ns}ns" >> sys.stdout)
+            print(f"- ✅ Config validated: reset_period={config_data.reset_period_ns}ns", flush=True)
             
             # Check patterns
             patterns = b['patterns']
@@ -437,7 +256,7 @@ jobs:
                 except:
                     break
             print(f"✅ Found {pattern_count} patterns loaded")
-            print(f"- ✅ {pattern_count} patterns loaded" >> sys.stdout)
+            print(f"- ✅ {pattern_count} patterns loaded", flush=True)
             
             # Check threshold patterns
             threshold_patterns = b['threshold_patterns']
@@ -450,14 +269,14 @@ jobs:
                 except:
                     break
             print(f"✅ Found {tpattern_count} threshold patterns loaded")
-            print(f"- ✅ {tpattern_count} threshold patterns loaded" >> sys.stdout)
+            print(f"- ✅ {tpattern_count} threshold patterns loaded", flush=True)
             
             print("\n✅ Detector validation complete - all components working!")
-            print("- ✅ Detector validation complete!" >> sys.stdout)
+            print("- ✅ Detector validation complete!", flush=True)
             
         except Exception as e:
             print(f"❌ Validation failed: {e}")
-            print(f"- ❌ Validation failed: {e}" >> sys.stdout)
+            print(f"- ❌ Validation failed: {e}", flush=True)
             import traceback
             traceback.print_exc()
             sys.exit(1)
@@ -487,10 +306,10 @@ jobs:
             if os.path.exists(filename):
                 size = os.path.getsize(filename)
                 print(f"✅ {filename} ({description}): {size} bytes")
-                print(f"- ✅ {filename}: {size} bytes" >> sys.stdout)
+                print(f"- ✅ {filename}: {size} bytes", flush=True)
             else:
                 print(f"❌ {filename} ({description}): MISSING")
-                print(f"- ❌ {filename}: MISSING" >> sys.stdout)
+                print(f"- ❌ {filename}: MISSING", flush=True)
                 all_ok = False
         
         # Check Python syntax
@@ -498,10 +317,10 @@ jobs:
         try:
             py_compile.compile('detector.py', doraise=True)
             print("✅ detector.py syntax: Valid")
-            print("- ✅ detector.py syntax: Valid" >> sys.stdout)
+            print("- ✅ detector.py syntax: Valid", flush=True)
         except py_compile.PyCompileError as e:
             print(f"❌ detector.py syntax: {e}")
-            print(f"- ❌ detector.py syntax error" >> sys.stdout)
+            print(f"- ❌ detector.py syntax error", flush=True)
             all_ok = False
         
         if all_ok:
@@ -554,84 +373,3 @@ jobs:
         name: test-results-${{ github.sha }}
         path: test-results/
         retention-days: 30
-=======
-          python3-pip
-    
-    - name: Run test suite
-      run: |
-        python3 test_detector.py
-      continue-on-error: true
-    
-    - name: Display test results
-      if: always()
-      run: |
-        echo "## 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        if [ -f test_report.md ]; then
-          cat test_report.md >> $GITHUB_STEP_SUMMARY
-        else
-          echo "⚠ Test report not generated" >> $GITHUB_STEP_SUMMARY
-        fi
-    
-    - name: Upload test report
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-report-${{ github.sha }}
-        path: test_report.md
-        retention-days: 30
-    
-    - name: Check test results
-      if: always()
-      run: |
-        if [ -f test_report.md ]; then
-          # Extract pass/fail counts from report
-          PASS_COUNT=$(grep -oP 'Passed: \K\d+' test_report.md || echo "0")
-          FAIL_COUNT=$(grep -oP 'Failed: \K\d+' test_report.md || echo "0")
-          
-          echo "Passed: $PASS_COUNT"
-          echo "Failed: $FAIL_COUNT"
-          
-          if [ "$FAIL_COUNT" -gt 0 ]; then
-            echo "⚠ Some tests failed, but continuing..."
-            exit 0  # Don't fail the workflow
-          fi
-        fi
-
-  summary:
-    name: CI Summary
-    runs-on: ubuntu-latest
-    needs: [python-check, c-code-check, build-and-validate, file-structure-check, code-quality]
-    if: always()
-    
-    steps:
-    - name: CI Status
-      run: |
-        echo "## 🚀 CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Job Status" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Python Check | ${{ needs.python-check.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| C Code Check | ${{ needs.c-code-check.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Build & Validate | ${{ needs.build-and-validate.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| File Structure | ${{ needs.file-structure-check.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Code Quality | ${{ needs.code-quality.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Build Artifacts" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        if [ "${{ needs.build-and-validate.result }}" == "success" ]; then
-          echo "✅ Build artifacts are available in the Artifacts section!" >> $GITHUB_STEP_SUMMARY
-          echo "You can download the built package and run it on your server." >> $GITHUB_STEP_SUMMARY
-        else
-          echo "❌ Build failed - artifacts not available" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-        echo "1. Download the build artifacts from the workflow run" >> $GITHUB_STEP_SUMMARY
-        echo "2. Extract and copy to your server" >> $GITHUB_STEP_SUMMARY
-        echo "3. Install BCC: \`sudo apt-get install bpfcc-tools python3-bpfcc\`" >> $GITHUB_STEP_SUMMARY
-        echo "4. Run: \`sudo python3 detector.py\`" >> $GITHUB_STEP_SUMMARY
->>>>>>> 40be31d6ede671b9df52e21f02882b97a9e635c2
-
